@@ -1,0 +1,397 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>P2P Tic-Tac-Toe</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.9/signalr.min.js"></script>
+    <style>
+        table {
+            border-collapse: collapse;
+        }
+
+        td {
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            font-size: 24px;
+            border: 1px solid #000;
+            cursor: pointer;
+        }
+
+        .player-X {
+            color: blue;
+        }
+
+        .player-O {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>P2P Tic-Tac-Toe</h1>
+    <input type="text" id="roomCode" placeholder="Enter room code">
+    <button onclick="joinRoom()">Join Room</button>
+    <button onclick="joinRandomRoom()">Join Random Room</button>
+    <button onclick="createPrivateRoom()">Create Private Room</button>
+
+    <h3>Status:</h3>
+    <pre id="status"></pre>
+
+    <h3>Room Participants:</h3>
+    <ul id="participants"></ul>
+
+    <h3>You are: <span id="currentPlayer">Loading...</span></h3>
+    <h3>Turn: <span id="turn">Loading...</span></h3>
+
+    <table id="board">
+        <tr><td data-x="0" data-y="0"></td><td data-x="0" data-y="1"></td><td data-x="0" data-y="2"></td></tr>
+        <tr><td data-x="1" data-y="0"></td><td data-x="1" data-y="1"></td><td data-x="1" data-y="2"></td></tr>
+        <tr><td data-x="2" data-y="0"></td><td data-x="2" data-y="1"></td><td data-x="2" data-y="2"></td></tr>
+    </table>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("http://localhost:5000/notifications", {
+                skipNegotiation: true,
+                transport: signalR.HttpTransportType.WebSockets
+            })
+            .build();
+
+        let peerConnection = null;
+        let dataChannel = null;
+        let myParticipantId = null;
+        let playerSymbol = "X";
+        let roomCode = "";
+        let players = [];
+        let isOfferer = false;
+        let hasWebRTCStarted = false;
+        let isMyTurn = false;
+
+        function logStatus(message) {
+            document.getElementById("status").textContent += `\n${message}`;
+            updateConnectionStatus(message);
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById("status");
+            statusElement.textContent = `Status: ${status}`;
+            console.log(status);
+        }
+
+        function updateParticipantsList(participants) {
+            players = participants;
+            const list = document.getElementById("participants");
+            list.innerHTML = "";
+            participants.forEach(p => {
+                const item = document.createElement("li");
+                item.textContent = `${p.name} (ID: ${p.id})`;
+                list.appendChild(item);
+            });
+
+            if (participants.length === 2) {
+                // Устанавливаем, кто ходит первым
+                isOfferer = (participants[0].id === myParticipantId);
+                playerSymbol = isOfferer ? "X" : "O";
+                document.getElementById("currentPlayer").textContent = playerSymbol;
+                document.getElementById("turn").textContent = isOfferer ? "Your" : "Rival's";  // Обновляем очередь
+                logStatus(`✅ Offer: ${isOfferer}`);
+                isMyTurn = isOfferer;
+                logStatus(`✅ ismyturn: ${isMyTurn}`);
+                if (!hasWebRTCStarted) {
+                    setupWebRTC();
+                }
+            }
+        }
+
+        async function startSignalR() {
+            if (connection.state !== "Connected") {
+                await connection.start();
+                logStatus("✅ Connected to SignalR server.");
+                updateConnectionStatus("Connected to SignalR server.");
+            }
+        }
+
+        async function joinRoom() {
+            roomCode = document.getElementById("roomCode").value;
+            if (!roomCode) return alert("Enter a room code");
+
+            await startSignalR();
+            logStatus(`🔹 Joining room: ${roomCode}...`);
+            await connection.invoke("JoinRoom", roomCode, 2);
+        }
+
+        async function joinRandomRoom() {
+            await startSignalR();
+            logStatus("🔹 Joining random room...");
+            roomCode = await connection.invoke("JoinRandomRoom", 2);
+            logStatus(`✅ Joined random room: ${roomCode}`);
+        }
+
+        async function createPrivateRoom() {
+            await startSignalR();
+            logStatus("🔹 Creating private room...");
+            roomCode = await connection.invoke("CreatePrivateRoom", 2);
+            logStatus(`✅ Private room created: ${roomCode}`);
+            alert(`Private Room Created: ${roomCode}`);
+        }
+
+        function setupWebRTC() {
+            if (hasWebRTCStarted) {
+                logStatus("⚠️ WebRTC already started, skipping...");
+                return;
+            }
+            hasWebRTCStarted = true;
+
+            peerConnection = createPeerConnection();
+            dataChannel = peerConnection.createDataChannel("game");
+            dataChannel.onmessage = event => updateBoard(JSON.parse(event.data));
+
+            if (isOfferer) {
+                logStatus("📡 I'm the offerer. Sending offer...");
+                const otherPlayer = players.find(p => p.id !== myParticipantId);
+                if (otherPlayer) {
+                    createOffer(otherPlayer.id);
+                }
+            } else {
+                logStatus("⌛ I'm waiting for an offer...");
+            }
+
+            updateConnectionStatus("WebRTC connection established.");
+        }
+
+        async function createOffer(targetId) {
+            if (!peerConnection || peerConnection.signalingState !== "stable") {
+                logStatus("⚠️ Offer skipped, signalingState not stable.");
+                return;
+            }
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            logStatus(`📡 Sending WebRTC offer to ${targetId}`);
+            connection.invoke("SendOffer", roomCode, targetId, JSON.stringify(offer));
+        }
+
+        function createPeerConnection() {
+            const pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" },  // Google STUN сервер
+                    { urls: "turn:turn.example.com", username: "user", credential: "pass" }
+                ]
+            });
+
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    const candidate = event.candidate;
+                    const candidateAddress = candidate.address;
+                    logStatus(`❄️ ICE candidate generated: ${JSON.stringify(candidate)}`);
+                    if (isLocalIp(candidateAddress)) {
+                        logStatus(`❄️ ICE кандидат: IP = ${candidateAddress} (локальный адрес, пропускаем)`);
+                        return;
+                    }
+
+                    const candidatePort = candidate.port;
+
+                    logStatus(`❄️ ICE кандидат: IP = ${candidateAddress}, Порт = ${candidatePort}`);
+
+                    if (roomCode) {
+                        const otherPlayer = players.find(p => p.id !== myParticipantId);
+                        if (otherPlayer) {
+                            logStatus(`❄️ Отправляем ICE кандидат ${otherPlayer.id}`);
+                            connection.invoke("SendIceCandidate", roomCode, otherPlayer.id, JSON.stringify(event.candidate))
+                                .catch(error => logStatus(`❌ Ошибка при отправке ICE: ${error.message}`));
+                        }
+                    }
+
+                    if (peerConnection && peerConnection.iceGatheringState === "complete") {
+                        logStatus("✅ ICE кандидаты собраны и отправлены.");
+                    }
+                }
+            };
+
+            pc.ondatachannel = event => {
+                dataChannel = event.channel;
+                dataChannel.onmessage = event => updateBoard(JSON.parse(event.data));
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                logStatus(`ICE connection state changed: ${pc.iceConnectionState}`);
+
+                if (pc.iceConnectionState === 'connected') {
+                    logStatus('✅ ICE connection established successfully');
+                } else if (pc.iceConnectionState === 'failed') {
+                    logStatus('❌ ICE connection failed');
+                } else if (pc.iceConnectionState === 'disconnected') {
+                    logStatus('⚠️ ICE connection disconnected');
+                } else if (pc.iceConnectionState === 'closed') {
+                    logStatus('❌ ICE connection closed');
+                }
+            };
+
+            return pc;
+        }
+
+        function isLocalIp(ip) {
+            const localIpPatterns = [
+                /^127\.\d+\.\d+\.\d+$/, // 127.x.x.x
+                /^10\.\d+\.\d+\.\d+$/,   // 10.x.x.x
+                /^192\.168\.\d+\.\d+$/,  // 192.168.x.x
+                /^172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+$/  // 172.16.x.x to 172.31.x.x
+            ];
+
+            return localIpPatterns.some(pattern => pattern.test(ip));
+        }
+
+        // Обновление доски игры
+        function updateBoard(move) {
+            const cell = document.querySelector(`td[data-x="${move.x}"][data-y="${move.y}"]`);
+            if (!cell.textContent) {
+                cell.textContent = move.player === 'X' ? 'X' : 'O';  // Обновляем доску для символа игрока
+                checkWinner();  // Проверяем победителя после каждого хода
+                isMyTurn = !isMyTurn;  // Меняем очередь
+                document.getElementById("turn").textContent = isMyTurn ? "Your" : "Rival's";  // Обновляем очередь
+            }
+        }
+
+        // Проверка на победу
+        function checkWinner() {
+            const cells = document.querySelectorAll("td");
+            const board = [
+                [cells[0], cells[1], cells[2]],
+                [cells[3], cells[4], cells[5]],
+                [cells[6], cells[7], cells[8]]
+            ];
+
+            for (let i = 0; i < 3; i++) {
+                if (board[i][0].textContent && board[i][0].textContent === board[i][1].textContent && board[i][1].textContent === board[i][2].textContent) {
+                    alert(`${board[i][0].textContent} wins!`);
+                    return;
+                }
+                if (board[0][i].textContent && board[0][i].textContent === board[1][i].textContent && board[1][i].textContent === board[2][i].textContent) {
+                    alert(`${board[0][i].textContent} wins!`);
+                    return;
+                }
+            }
+
+            if (board[0][0].textContent && board[0][0].textContent === board[1][1].textContent && board[1][1].textContent === board[2][2].textContent) {
+                alert(`${board[0][0].textContent} wins!`);
+                return;
+            }
+
+            if (board[0][2].textContent && board[0][2].textContent === board[1][1].textContent && board[1][1].textContent === board[2][0].textContent) {
+                alert(`${board[0][2].textContent} wins!`);
+                return;
+            }
+        }
+
+        document.querySelectorAll("td").forEach(cell => {
+            cell.addEventListener("click", (event) => {
+                console.log("Cell clicked:", event.target);
+                // Проверяем, действительно ли разрешён ход и ячейка пуста
+                console.log("Click ignored. isMyTurn:", isMyTurn, "Cell content:", event.target.textContent);
+                if (isMyTurn && !event.target.textContent) {
+                    const x = event.target.getAttribute("data-x");
+                    const y = event.target.getAttribute("data-y");
+                    const move = { x: parseInt(x), y: parseInt(y), player: playerSymbol };
+                    console.log("Processing move:", move);
+
+                    // Попытаемся отправить ход через dataChannel
+                    try {
+                        dataChannel.send(JSON.stringify(move));
+                        console.log("Move sent via dataChannel");
+                    } catch (err) {
+                        console.error("dataChannel.send failed", err);
+                    }
+
+                    // Обновляем доску сразу для текущего игрока
+                    updateBoard(move);
+                } else {
+                    console.log("Click ignored. isMyTurn:", isMyTurn, "Cell content:", event.target.textContent);
+                }
+            });
+        });
+
+
+        connection.on("UpdateRoomParticipants", participants => {
+            logStatus("👥 Room participant list updated.");
+            updateParticipantsList(participants);
+
+            participants.forEach((participant, index) => {
+                logStatus(`👤 Participant ${index + 1}: ${participant.name} (ID: ${participant.id})`);
+            });
+
+            if (participants.length === 2) {
+                logStatus(`👤 Participant length ${participants.length}`);
+                if (!hasWebRTCStarted) {
+                    logStatus(`🏠 connectionid: ${myParticipantId}`);
+                    logStatus(`🏠 participants[0].id: ${participants[0].id}`);
+                    isOfferer = (participants[0].id === myParticipantId);
+                    logStatus(`🏠 connectionid: ${myParticipantId}`);
+                    logStatus(`🏠 Room Code: ${roomCode}`);
+                    logStatus(isOfferer ? "📡 I'll send an offer." : "⌛ Waiting for offer.");
+                    setupWebRTC();
+                }
+                updateConnectionStatus("Both players are in the room. Waiting for WebRTC offer...");
+            }
+        });
+
+        connection.on("ReceiveOffer", async (fromId, offer) => {
+            logStatus(`📡 Received WebRTC offer from ${fromId}`);
+
+            if (peerConnection && peerConnection.signalingState !== "stable") {
+                logStatus("⚠️ Ignoring received offer, signalingState is not stable.");
+                return;
+            }
+
+            peerConnection = createPeerConnection();
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
+            logStatus(`✅ Remote description set with type: offer`);
+
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            logStatus(`📡 Sending WebRTC answer to ${fromId}`);
+            connection.invoke("SendAnswer", roomCode, fromId, JSON.stringify(answer));
+        });
+
+        connection.on("ReceiveAnswer", (fromId, answer) => {
+            logStatus(`✅ Received WebRTC answer from ${fromId}`);
+            peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
+        });
+
+        connection.on("ReceiveIceCandidate", (fromId, candidate) => {
+            logStatus(`❄️ Received ICE candidate from ${fromId}`);
+            peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate))).then(() => {
+                logStatus("✅ ICE candidate added successfully");
+            }).catch((error) => {
+                logStatus(`❌ Error adding ICE candidate: ${error}`);
+            });
+        });
+
+        connection.on("ReceiveMessage", (from, message) => {
+            logStatus(`💬 ${from}: ${message}`);
+
+            const match = message.match(/Your ID: (\w+)/);
+            if (match) {
+                myParticipantId = match[1];
+            }
+
+            const joinMatch = message.match(/joined random room (\w+)/);
+            if (joinMatch) {
+                roomCode = joinMatch[1];
+                logStatus(`🏠 Room code set: ${roomCode}`);
+            }
+
+            const welcomeMatch = message.match(/Welcome to room (\w+)/);
+            if (welcomeMatch) {
+                roomCode = welcomeMatch[1];
+                logStatus(`🔑 Welcome to room ${roomCode}`);
+            }
+        });
+
+        connection.onclose(async () => {
+            logStatus("❌ Disconnected from SignalR server.");
+        });
+
+        startSignalR();
+    </script>
+</body>
+</html>

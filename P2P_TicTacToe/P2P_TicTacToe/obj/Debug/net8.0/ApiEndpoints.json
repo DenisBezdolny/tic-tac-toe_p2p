@@ -1,0 +1,18 @@
+[
+  {
+    "ContainingType": "GameController",
+    "Method": "MakeMove",
+    "RelativePath": "api/game/move",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "move",
+        "Type": "MoveRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "Files": [
+    {
+      "Id": "D:\\WORK\\trei\\GMSB\\ttt-p2p\\tic-tac-toe_p2p\\P2P_TicTacToe\\P2P_TicTacToe\\wwwroot\\index.html",
+      "PackagePath": "staticwebassets\\index.html"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.P2P_TicTacToe.Microsoft.AspNetCore.StaticWebAssetEndpoints.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssetEndpoints.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.P2P_TicTacToe.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.P2P_TicTacToe.props",
+      "PackagePath": "build\\P2P_TicTacToe.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.P2P_TicTacToe.props",
+      "PackagePath": "buildMultiTargeting\\P2P_TicTacToe.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.P2P_TicTacToe.props",
+      "PackagePath": "buildTransitive\\P2P_TicTacToe.props"
+    }
+  ],
+  "ElementsToRemove": []
+}
