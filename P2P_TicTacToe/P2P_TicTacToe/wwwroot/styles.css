@@ -1,0 +1,92 @@
+﻿/* Общие стили для страницы */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #f0f0f0, #dcdcdc);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* Контейнер для игры */
+.wrapper {
+    background-color: #fff;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 600px;
+    width: 100%;
+    text-align: center;
+}
+
+    /* Заголовок и прочие элементы */
+    .wrapper h1 {
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    /* Стили для input и кнопок */
+    .wrapper input[type="text"],
+    .wrapper button {
+        padding: 0.5rem 1rem;
+        margin: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+
+    .wrapper button {
+        background-color: #007BFF;
+        color: #fff;
+        cursor: pointer;
+        border: none;
+        transition: background-color 0.3s ease;
+    }
+
+        .wrapper button:hover {
+            background-color: #0056b3;
+        }
+
+    /* Стили для статуса и списка участников */
+    .wrapper pre,
+    .wrapper ul {
+        background-color: #f7f7f7;
+        padding: 1rem;
+        border-radius: 4px;
+        text-align: left;
+        max-height: 200px;
+        overflow-y: auto;
+        margin: 1rem 0;
+    }
+
+    /* Игровое поле */
+    .wrapper table {
+        margin: 1rem auto;
+        border-collapse: collapse;
+    }
+
+    .wrapper td {
+        width: 80px;
+        height: 80px;
+        border: 2px solid #007BFF;
+        font-size: 2rem;
+        text-align: center;
+        vertical-align: middle;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+        .wrapper td:hover {
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+
+    /* Стили для игроков */
+    .wrapper .player-X {
+        color: #007BFF;
+    }
+
+    .wrapper .player-O {
+        color: #FF5733;
+    }
